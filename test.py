@@ -110,12 +110,16 @@ f"\n    const MD5Final  = resolveAddress('{final}');\n"
 
     missing = 0
 
+    base = FlatProgramAPI(currentProgram).getFirstData().getAddress().getOffset()
     for addr, hash, buf, mask in list(expected):
         if addr not in actual:
-            if verbosity > 0:
-                print('Function missing from ghidra: ' + hex(addr))
-            expected.remove((addr, hash, buf, mask))
-            missing+=1
+            if (addr + base) in actual:   #ghidra sometimes have a different base (doesnt matter in actual lumina operations, since addresses are never checked)
+                expected[expected.index((addr, hash, buf, mask))] = (addr+base, hash, buf, mask)
+            else:
+                if verbosity > 0:
+                    print('Function missing from ghidra: ' + hex(addr))
+                expected.remove((addr, hash, buf, mask))
+                missing+=1
 
     if verbosity > 0:
         print()

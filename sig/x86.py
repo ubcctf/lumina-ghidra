@@ -1,5 +1,6 @@
 from ghidra.program.database.function import FunctionDB
 from ghidra.program.model.address import Address
+from ghidra.program.model.symbol import SymbolType
 import jep
 
 from capstone import Cs, CsInsn, CS_ARCH_X86, CS_MODE_64
@@ -17,7 +18,8 @@ class X86(Sig):
         #also include if is pointing to start of instruction, but never mask same function jumps
         #sometimes there might be multiple functions at the same address even on the same architecture it seems like - we check all of them to see if any is the same function then reject
         #ghidra cant have multiple functions at the same location
-        return offset and (((o:=self.prog.getFunctionContaining(offset)) and o.getEntryPoint() != f.getEntryPoint() and self.prog.getInstructionAt(offset)) or (self.prog.getDataContaining(offset) and self.prog.getReferencesTo(offset)))
+        #if a data var exists (undefined or not) at offset there has to be a reference in ghidra
+        return offset and (((o:=self.prog.getFunctionContaining(offset)) and o.getEntryPoint() != f.getEntryPoint() and self.prog.getInstructionAt(offset)) or self.prog.getDataContaining(offset) or self.prog.getUndefinedDataAt(offset))
         #jep jarrays are correctly falsey
 
 
@@ -42,7 +44,7 @@ class X86(Sig):
 
     def calc_func_metadata(self, func: FunctionDB) -> tuple[str, bytes, bytes]:
 
-        if func.isThunk() and func.getThunkedFunction(False).isExternal():   #special function, ignore
+        if func.isThunk() and func.getThunkedFunction(False).isExternal():   #special functions, ignore
             return
 
         ranges = func.getBody()
