@@ -4,7 +4,6 @@ Ghidra port for [lumina-binja](https://github.com/ubcctf/lumina-binja), a reimpl
 The features provided by this port is on par as the Binary Ninja plugin - see the repo for more info!
 
 ## Building and Installation
- - Run `pip install -r requirements.txt` on your main python installation (or the one that Ghidrathon is using)
  - `git clone --recurse-submodules` to get the Ghidrathon repo
  - `cd Ghidrathon && git checkout pre-10.2 0a54fa1cef41869582eb3614a86a9475ecf5c67a` if you are running Ghidra < v10.2
  - `gradle -PGHIDRA_INSTALL_DIR=<absolute path to Ghidra install>` should compile both Ghidrathon (in `Ghidrathon/dist/`) and this plugin (in `dist/`)

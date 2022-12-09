@@ -52,6 +52,23 @@ tasks.copyDependencies.configure {
 	actions.clear()
 }
 
+//obtain pip in the same way Ghidrathon does
+def pythonBin
+
+if (project.hasProperty("PYTHON_BIN")) {
+	pythonBin = project.getProperty("PYTHON_BIN")
+}
+else {
+	pythonBin = "python"
+}
+
+//if this fails, it means jep would've likely failed too - abort build as expected
+task pipInstall(type: Exec) {
+	commandLine pythonBin, '-m', 'pip', 'install', '-r', 'requirements.txt'
+}
+
+tasks.buildExtension.dependsOn(pipInstall)
+
 dependencies {
     compile project(':Ghidrathon')
 }

@@ -21,9 +21,9 @@ import ghidrathon.GhidrathonPlugin;
 import ghidrathon.interpreter.GhidrathonInterpreter;
 
 @PluginInfo(
-	status = PluginStatus.STABLE,
+	status = PluginStatus.UNSTABLE,
 	packageName = "lumina",
-	category = PluginCategoryNames.COMMON,
+	category = PluginCategoryNames.ANALYSIS,
 	shortDescription = "Lumina implementation for Ghidra",
 	description = "This plugin adds support for IDA's Lumina feature in Ghidra."//,
 	//servicesRequired = { GhidrathonPlugin.class }   //somehow this breaks ghidra since ghidrathon is already loaded?
