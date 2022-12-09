@@ -1,0 +1,3 @@
+[submodule "Ghidrathon"]
+	path = Ghidrathon
+	url = https://github.com/mandiant/Ghidrathon.git

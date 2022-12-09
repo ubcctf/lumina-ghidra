@@ -1,0 +1,8 @@
+**/__pycache__/
+/build/
+/bin/
+/dist/
+.gradle/
+.settings/
+.project
+.classpath

@@ -179,5 +179,4 @@ f"\n    const MD5Final  = resolveAddress('{final}');\n"
 
 
 if __name__ == "__main__":
-    import sys
     check_against_ida(input(), int(val) if (val:=input()) else 2, 'x86') #only x86 is supported atm
