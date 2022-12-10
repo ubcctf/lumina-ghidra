@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import docking.ActionContext;
 import docking.action.DockingAction;
@@ -42,7 +44,7 @@ import resources.Icons;
 	eventsConsumed = { ProgramLocationPluginEvent.class }  //needed to get currentLocation updates
 )
 public class LuminaPlugin extends ProgramPlugin {
-	private GhidrathonInterpreter python;
+	private PythonExecutor python;
 	private File pyScripts;
 
 	public LuminaPlugin(PluginTool tool) throws IOException {
@@ -55,9 +57,9 @@ public class LuminaPlugin extends ProgramPlugin {
 	
 	@Override
 	protected void init() {
-		//start the lumina client
+		//start the lumina client; DONE move to a separate thread in case other plugins want to make a jep interpreter on the GUI thread too? (also for running background tasks)
 		try {
-			python = GhidrathonInterpreter.get();
+			python = new PythonExecutor();
 			ResourceFile entry = Arrays.asList(pyScripts.listFiles()).stream().filter(f -> f.getName().equals("entry.py")).map(f -> new ResourceFile(f)).findFirst().get();
 			
 			//set any errors to print to the console; it is expected that all communciations should be done through Msg logger but for debugging purposes this would be much more visible
@@ -67,8 +69,6 @@ public class LuminaPlugin extends ProgramPlugin {
 			python.set("plugin", this);   //pass everything we need to do the plugin in python; getTool will give us the rest we need			
 			python.runScript(entry);		
 		} catch(NoSuchElementException e) {
-			python.close();
-			python = null;
 			Msg.error(this, "Lumina python scripts not found:", e);
 		}
 		
@@ -81,10 +81,12 @@ public class LuminaPlugin extends ProgramPlugin {
 		DockingAction action = new DockingAction(name, "Lumina") {
 			@Override
 			public void actionPerformed(ActionContext context) {
-				if(python != null) {					
+				if(python.isEnabled()) {					
 					python.set("ctx", currentProgram);
+					
 					if(funcSpecific)   //only set if its function specific - can be null otherwise
 						python.set("func", currentProgram.getFunctionManager().getFunctionContaining(currentLocation.getAddress()));
+					
 					//Msg is probably not in scope, so we import
 					python.eval(exec + (checkValid ? " if client.is_valid(ctx) else __import__('ghidra.util').util.Msg.showWarn(plugin, None, 'Lumina - Unavailable', 'This function is not available in this context. (Either the client is not connected, or the architecture is currently unsupported.)')" : ""));
 				} else {
@@ -117,7 +119,7 @@ public class LuminaPlugin extends ProgramPlugin {
 	
 	@Override
 	protected void dispose() {
-		if(python != null) 
+		if(python.isEnabled()) 
 			python.close();      //need to close it at the end in case we need to turn lumina back on (which is likely in the same thread as before aka jep is gonna die)
 	}
 	

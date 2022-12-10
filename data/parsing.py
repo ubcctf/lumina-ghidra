@@ -4,6 +4,7 @@ from ghidra.program.database import ProgramDB
 from ghidra.program.model.symbol import SourceType
 from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.program.model.listing import CodeUnit
+from ghidra.framework.plugintool import PluginTool
 
 import socket, itertools
 
@@ -71,8 +72,11 @@ def extract_md(ctx: ProgramDB, func: FunctionDB, gen: Sig) -> dict:
     #but might be helpful in defining data vars so parsing might be good
 
     if chunks: #only compute signature and returns something if has data
-        sig, block, mask = gen.calc_func_metadata(func)
-
+        data = gen.calc_func_metadata(func)
+        if not data:
+            return None
+        
+        sig, block, mask = data
         return {
             "metadata": {
                 "func_name": func.getName(),  #func name is automatically whatever it should be
@@ -89,15 +93,18 @@ def extract_md(ctx: ProgramDB, func: FunctionDB, gen: Sig) -> dict:
 
 
 
-def craft_push_md(ctx: ProgramDB, funcs: list[FunctionDB]) -> dict:
+def craft_push_md(ctx: ProgramDB, funcs: list[FunctionDB], tool: PluginTool = None) -> dict:
     arch = ARCH_MAPPING[ctx.getLanguage().getProcessor().toString()](ctx)  #again, Ghidra only allows one arch at a time
 
+    progress = "[Lumina] Extracting function metadata ({count}/" + str(len(funcs)) + " functions)"
     push, eas = [], []
     for i, f in enumerate(funcs):
         md = extract_md(ctx, f, arch)
         if md: #only apply if extracted useful data
             push.append(md)
             eas.append(f.getEntryPoint().getOffset())
+        if tool:
+            tool.setStatusInfo(progress.format(count=i))
 
     return {
         "field_0x10": 0, 
@@ -115,13 +122,26 @@ def craft_push_md(ctx: ProgramDB, funcs: list[FunctionDB]) -> dict:
 
 
 #again, ghidra support only one arch at a time so no more lists
-def craft_pull_md(ctx: ProgramDB, fs: list[FunctionDB]) -> dict:
+def craft_pull_md(ctx: ProgramDB, fs: list[FunctionDB], tool: PluginTool = None) -> dict:
     arch = ARCH_MAPPING[ctx.getLanguage().getProcessor().toString()](ctx)
+
+    sigs = []
+    i = 0
+    progress = "[Lumina] Calculating function signatures ({count}/" + str(len(fs)) + " functions)"
+    for func in fs:
+        if tool:
+            tool.setStatusInfo(progress.format(count=i))
+
+        sig = arch.calc_func_metadata(func)
+        if sig:
+            sigs.append({'signature':sig[0]})
+
+        i+=1
 
     #already grouped, the first one will have the same arch as the rest
     return {'flags': 1 if ctx.getDefaultPointerSize() == 8 else 0, 
         'ukn_list':[0]*len(fs),
-        'funcInfos':[{'signature':arch.calc_func_metadata(func)[0]} for func in fs]}
+        'funcInfos':sigs}
 
 
 

@@ -1,6 +1,7 @@
 
 from lumina_structs import *
 from ghidra.util import Msg
+from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.program.database.function import FunctionDB
 from ghidra.program.database import ProgramDB
 
@@ -11,11 +12,10 @@ from .parsing import apply_md, craft_push_md, craft_pull_md
 
 
 class LuminaClient:
-    def __init__(self, plugin, settings) -> None:
+    def __init__(self, plugin) -> None:
         self.socket = None
         self.lock = threading.RLock() #we need RLock to be able to enter critical sections holding a lock already
         self.plugin = plugin
-        self.settings = settings
         self.reconnect()
 
     def is_valid(self, ctx: ProgramDB):
@@ -47,21 +47,23 @@ class LuminaClient:
                 if self.socket:  #reset connection
                     self.socket.close()
 
-                host = self.settings.getString('Host Address', ''), self.settings.getInt('Port', 0)
+                settings = self.plugin.getTool().getOptions("Lumina")   #refresh settings
+
+                host = settings.getString('Host Address', ''), settings.getInt('Port', 0)
 
                 print(host)
 
                 self.socket = socket.socket()
                 self.socket.connect(host)
 
-                cert = self.settings.getFile('Key File', None)
+                cert = settings.getFile('Key File', None)
                 if cert:
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.load_verify_locations(cert.getPath())
                     self.socket = context.wrap_socket(self.socket, server_hostname=host[0])
 
                 try:
-                    keyfile = self.settings.getFile('TLS Certificate File', None)
+                    keyfile = settings.getFile('TLS Certificate File', None)
                     if keyfile:
                         with open(keyfile.getPath(), 'rb') as kf:
                             key = kf.read()
@@ -75,7 +77,7 @@ class LuminaClient:
                 if(self.send_and_recv_rpc(RPC_TYPE.RPC_HELO, protocol=2, hexrays_license=key, hexrays_id=0, watermark=0, field_0x36=0)[0].code != RPC_TYPE.RPC_OK):
                     raise ConnectionError('Handshake failed (Invalid key?)')
 
-                print(self.settings.getString('Host Address', ''), self.settings.getInt('Port', 0))
+                print(settings.getString('Host Address', ''), settings.getInt('Port', 0))
 
                 Msg.info(self.plugin, 'Connection to Lumina server ' +  host[0] + ':' + str(host[1]) + ' (TLS: ' + str(bool(cert)) + ') succeeded.')
             except Exception as e:
@@ -91,47 +93,50 @@ class LuminaClient:
     #
 
     def pull_all_mds(self, ctx: ProgramDB):
+        #background in this context is in the pythread - all commands get queued into that thread
         Msg.info(self.plugin, "Pulling all function metadata in the background...")
 
-        copy = list(ctx.functions)  #just in case functions changed while we were waiting, make a copy since we rely on ordering heavily
-        send_and_recv_rpc = self.send_and_recv_rpc
+        #just in case functions changed while we were waiting, make a copy since we rely on ordering heavily
+        #also coz otherwise it returns a java array which is hard to use lol
+        copy = list(ctx.getFunctionManager().getFunctions(True))
 
-        class RunPull(BackgroundTaskThread):
-            def run(self):
-                for kwargs in craft_pull_md(ctx, copy, self):
-                    self.progress = '[Lumina] Sending pull request...'
+        tool = self.plugin.getTool()
 
-                    msg = send_and_recv_rpc(RPC_TYPE.PULL_MD, **kwargs)[1]
+        pull = craft_pull_md(ctx, copy, tool)
 
-                    self.progress = '[Lumina] Applying metadata...'
+        #TODO use Command class so we get a nicer status update panel
+        #(if possible; we aren't using their task queue so im not sure)
+        tool.setStatusInfo('[Lumina] Sending pull request...')
 
-                    if msg:
-                        it = iter(msg.results) #also results only have valid mds so its easier to model with iterator
-                        for i, found in enumerate(msg.found):
-                            if not found: #0 means found for some reason? 
-                                apply_md(ctx, copy[i], next(it))
-                        Msg.info(self.plugin, 'Pulled ' + str(len(msg.found) - sum(msg.found)) + '/' + str(len(msg.found)) + ' functions successfully.')
+        msg = self.send_and_recv_rpc(RPC_TYPE.PULL_MD, **pull)[1]
 
-        RunPull('[Lumina] Pulling metadata...', True).start()  #doesnt matter if we copy or not here
+        tool.setStatusInfo('[Lumina] Applying metadata...')
+
+        if msg:
+            it = iter(msg.results) #also results only have valid mds so its easier to model with iterator
+            for i, found in enumerate(msg.found):
+                if not found: #0 means found for some reason? 
+                    apply_md(ctx, copy[i], next(it))
+            Msg.info(self.plugin, 'Pulled ' + str(len(msg.found) - sum(msg.found)) + '/' + str(len(msg.found)) + ' functions successfully.')
+
+        tool.clearStatusInfo()  #we are done, and need to reset the status
 
 
     def push_all_mds(self, ctx: ProgramDB):
         Msg.info(self.plugin, "Pushing all function metadata in the background...")
 
-        send_and_recv_rpc = self.send_and_recv_rpc
+        tool = self.plugin.getTool()
+
+        kwargs = craft_push_md(ctx, list(ctx.getFunctionManager().getFunctions(True)), tool)
         
-        class RunPush(BackgroundTaskThread):
-            def run(self):
-                kwargs = craft_push_md(ctx, ctx.functions)
-                
-                self.progress = '[Lumina] Sending push request...'
+        tool.setStatusInfo('[Lumina] Sending push request...')
 
-                msg = send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)[1]
+        msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)[1]
 
-                if msg:
-                    Msg.info(self.plugin, 'Pushed ' + str(sum(msg.resultsFlags)) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.')
-
-        RunPush('[Lumina] Pushing metadata...', True).start()  #doesnt matter if we copy or not here
+        if msg:
+            Msg.info(self.plugin, 'Pushed ' + str(sum(msg.resultsFlags)) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.')
+        
+        tool.clearStatusInfo()
 
     #
     # Function specific commands
