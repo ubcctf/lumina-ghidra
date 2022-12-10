@@ -1,38 +1,24 @@
 package org.maplebacon.lumina;
 
 import ghidra.app.plugin.ProgramPlugin;
-import ghidra.app.script.GhidraState;
 import ghidra.app.services.ConsoleService;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.NoSuchElementException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 import docking.ActionContext;
 import docking.action.DockingAction;
-import docking.action.MenuBarData;
 import docking.action.MenuData;
-import docking.action.ToolBarData;
 import generic.jar.ResourceFile;
 import ghidra.app.events.ProgramLocationPluginEvent;
 import ghidra.app.plugin.PluginCategoryNames;
 import ghidra.framework.Application;
-import ghidra.framework.plugintool.PluginEvent;
 import ghidra.framework.plugintool.PluginInfo;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.framework.plugintool.util.PluginStatus;
-import ghidra.program.database.function.FunctionDB;
-import ghidra.program.flatapi.FlatProgramAPI;
-import ghidra.program.model.listing.Function;
 import ghidra.util.Msg;
-import ghidrathon.GhidrathonPlugin;
-import ghidrathon.interpreter.GhidrathonInterpreter;
-import resources.Icons;
 
 @PluginInfo(
 	status = PluginStatus.UNSTABLE,
@@ -40,7 +26,7 @@ import resources.Icons;
 	category = PluginCategoryNames.ANALYSIS,
 	shortDescription = "Lumina implementation for Ghidra",
 	description = "This plugin adds support for IDA's Lumina feature in Ghidra.",
-	servicesRequired = { ConsoleService.class },    //needed to ensure console initiates first
+	servicesRequired = { ConsoleService.class },    //needed to ensure console initiates first for python logging
 	eventsConsumed = { ProgramLocationPluginEvent.class }  //needed to get currentLocation updates
 )
 public class LuminaPlugin extends ProgramPlugin {
@@ -73,7 +59,6 @@ public class LuminaPlugin extends ProgramPlugin {
 		}
 		
 		createActions();
-
 	}
 	
 	private DockingAction getLuminaAction(String name, String exec, boolean checkValid, boolean funcSpecific) {
@@ -122,5 +107,4 @@ public class LuminaPlugin extends ProgramPlugin {
 		if(python.isEnabled()) 
 			python.close();      //need to close it at the end in case we need to turn lumina back on (which is likely in the same thread as before aka jep is gonna die)
 	}
-	
 }

@@ -22,7 +22,7 @@ class LuminaClient:
         #ghidra doesnt allow multi arch disassembly so no function specific context needed
         return self.socket and ctx.getLanguage().getProcessor().toString() in ARCH_MAPPING
     
-    def send_and_recv_rpc(self, code: RPC_TYPE, **kwargs):
+    def send_and_recv_rpc(self, code: RPC_TYPE, noretry: bool = False, **kwargs):
         try: 
             with self.lock: #only lock if not already in critical section (see reconnect())
                 payload = rpc_message_build(code, **kwargs)
@@ -32,10 +32,12 @@ class LuminaClient:
                 packet, message = rpc_message_parse(self.socket)
                 Msg.debug(self.plugin, 'Received ' + str(packet) + 'Message: ' + str(message) + '')
                 return packet, message
-        except (ConnectionError, con.StreamError):
-            Msg.warn(self.plugin, 'Disconnected from the Lumina server. Reconnecting...')
-            self.reconnect()
-            return self.send_and_recv_rpc(code, **kwargs)  #retry
+        except (ConnectionError, con.StreamError) as e:
+            Msg.warn(self.plugin, 'Disconnected from the Lumina server.' + ('' if noretry else ' Reconnecting...'))
+            if not noretry:
+                self.reconnect()
+                return self.send_and_recv_rpc(code, **kwargs)  #retry
+            return (None, None)
         except Exception as e:
             Msg.error(self.plugin, 'Something went wrong: ' + str(type(e)) + ': ' + str(e))
             return (None, None)
@@ -49,21 +51,19 @@ class LuminaClient:
 
                 settings = self.plugin.getTool().getOptions("Lumina")   #refresh settings
 
-                host = settings.getString('Host Address', ''), settings.getInt('Port', 0)
-
-                print(host)
+                host = settings.getString('Host Address', ''), int(settings.getString('Port', ''))
 
                 self.socket = socket.socket()
                 self.socket.connect(host)
 
-                cert = settings.getFile('Key File', None)
+                cert = settings.getFile('TLS Certificate File', None)
                 if cert:
                     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                     context.load_verify_locations(cert.getPath())
                     self.socket = context.wrap_socket(self.socket, server_hostname=host[0])
 
                 try:
-                    keyfile = settings.getFile('TLS Certificate File', None)
+                    keyfile = settings.getFile('Key File', None)
                     if keyfile:
                         with open(keyfile.getPath(), 'rb') as kf:
                             key = kf.read()
@@ -74,10 +74,10 @@ class LuminaClient:
                     key = b''
 
                 #TODO reverse hexrays id and watermark to support genuine IDA licenses?
-                if(self.send_and_recv_rpc(RPC_TYPE.RPC_HELO, protocol=2, hexrays_license=key, hexrays_id=0, watermark=0, field_0x36=0)[0].code != RPC_TYPE.RPC_OK):
+                #dont retry for this query to prevent infinite mutual recursion
+                resp = self.send_and_recv_rpc(RPC_TYPE.RPC_HELO, noretry=True, protocol=2, hexrays_license=key, hexrays_id=0, watermark=0, field_0x36=0)[0]
+                if(not resp or resp.code != RPC_TYPE.RPC_OK):
                     raise ConnectionError('Handshake failed (Invalid key?)')
-
-                print(settings.getString('Host Address', ''), settings.getInt('Port', 0))
 
                 Msg.info(self.plugin, 'Connection to Lumina server ' +  host[0] + ':' + str(host[1]) + ' (TLS: ' + str(bool(cert)) + ') succeeded.')
             except Exception as e:
@@ -117,9 +117,12 @@ class LuminaClient:
             for i, found in enumerate(msg.found):
                 if not found: #0 means found for some reason? 
                     apply_md(ctx, copy[i], next(it))
-            Msg.info(self.plugin, 'Pulled ' + str(len(msg.found) - sum(msg.found)) + '/' + str(len(msg.found)) + ' functions successfully.')
-
-        tool.clearStatusInfo()  #we are done, and need to reset the status
+            log = 'Pulled ' + str(len(msg.found) - sum(msg.found)) + '/' + str(len(msg.found)) + ' functions successfully.'
+            Msg.info(self.plugin, log)
+            tool.setStatusInfo('[Lumina] ' + log)
+        else:
+            #it doesnt matter if the status is always there its better than not being able to see it at all
+            tool.setStatusInfo('[Lumina] Pull request for all functions failed.')
 
 
     def push_all_mds(self, ctx: ProgramDB):
@@ -134,9 +137,12 @@ class LuminaClient:
         msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)[1]
 
         if msg:
-            Msg.info(self.plugin, 'Pushed ' + str(sum(msg.resultsFlags)) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.')
-        
-        tool.clearStatusInfo()
+            log = 'Pushed ' + str(sum(msg.resultsFlags)) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.'
+            Msg.info(self.plugin, log)
+            tool.setStatusInfo('[Lumina] ' + log)
+        else:
+            tool.setStatusInfo('[Lumina] Push request for all functions failed.')
+
 
     #
     # Function specific commands
@@ -145,12 +151,19 @@ class LuminaClient:
     def pull_function_md(self, ctx: ProgramDB, func: FunctionDB):
         Msg.debug(self.plugin, 'Pulling metadata for func ' + func.getName() + '...')
 
-        #TODO pop up saying "pulling function metadata..."?
         msg = self.send_and_recv_rpc(RPC_TYPE.PULL_MD, **craft_pull_md(ctx, [func]))[1]
+
+        #status info kinda nice for displaying subtle msgs to the user that's not lost in the logs
+        #so lets do it even for the function specific commands
+        tool = self.plugin.getTool()
 
         if msg and msg.results:
             apply_md(ctx, func, msg.results[0])
-            Msg.info(self.plugin, 'Pulled metadata for function "' + func.getName() + '" successfully.')
+            log = 'Pulled metadata for function "' + func.getName() + '" successfully.'
+            Msg.info(self.plugin, log)
+            tool.setStatusInfo('[Lumina] ' + log)
+        else:
+            tool.setStatusInfo('[Lumina] Pull request for the function failed.')
                 
 
     def push_function_md(self, ctx: ProgramDB, func: FunctionDB):
@@ -158,5 +171,11 @@ class LuminaClient:
 
         msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **craft_push_md(ctx, [func]))[1]
 
+        tool = self.plugin.getTool()
+
         if msg:
-            Msg.info(self.plugin, 'Pushed metadata for function "' + func.getName() + '" successfully.')
+            log = 'Pushed metadata for function "' + func.getName() + '" successfully.'
+            Msg.info(self.plugin, log)
+            tool.setStatusInfo('[Lumina] ' + log)
+        else:
+            tool.setStatusInfo('[Lumina] Push request for the function failed.')

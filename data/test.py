@@ -89,7 +89,7 @@ f"\n    const MD5Final  = resolveAddress('{final}');\n"
     script.load()
     
 
-    #ghidraa already loaded currentProgram for us
+    #ghidra already loaded currentProgram for us
     start = time.time()  #ignore open_view overhead in our timing
     
     gen = ARCH_MAPPING[arch](currentProgram)
