@@ -9,7 +9,7 @@ The features provided by this port is on par with the Binary Ninja plugin - see 
  - include `--recurse-submodules` to get the Ghidrathon repo when cloning this repo
  - `cd Ghidrathon && git checkout pre-10.2 0a54fa1cef41869582eb3614a86a9475ecf5c67a` if you are running Ghidra < v10.2
  - `gradle -PGHIDRA_INSTALL_DIR=<absolute path to Ghidra install>` should compile both Ghidrathon (in `Ghidrathon/dist/`) and this plugin (in `dist/`)
- - Alternatively, if you are using `EclipseDev`, import the project, right click the project: `GhidraDev -> Link Ghidra...`, follow the prompts, and then `GhidraDev -> Export -> Ghidra Module Extension...` which will do the same thing as the command above
+ - Alternatively, if you are using `GhidraDev` in Eclipse, import the project, right click the project: `GhidraDev -> Link Ghidra...`, follow the prompts, and then `GhidraDev -> Export -> Ghidra Module Extension...` which will do the same thing as the command above
  - Go into Ghidra, `File -> Install Extensions`, click the green arrow and select both of the zip file
  - Check both of the new extensions and restart Ghidra
  - Configure Lumina through `Edit -> Tool Options -> Lumina` in disassembler view; Most logs will be viewable in the main Ghidra tool -> `Help -> Show Log`
