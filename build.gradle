@@ -70,5 +70,5 @@ task pipInstall(type: Exec) {
 tasks.buildExtension.dependsOn(pipInstall)
 
 dependencies {
-    compile project(':Ghidrathon')
+    implementation project(':Ghidrathon')
 }
