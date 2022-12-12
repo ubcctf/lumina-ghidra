@@ -1,7 +1,7 @@
-__package__ = 'data'   #hotfix for relative imports
-
 import sys
-sys.frozen = 1   #hotfix for win32com SetupEnvironment NoneType is not callable; we are effectively running a bundled python installation anyway
+
+#hotfix for win32com SetupEnvironment NoneType is not callable; we are effectively running a bundled python installation anyway
+sys.frozen = 1
 
 from .client import LuminaClient
 
@@ -19,4 +19,4 @@ settings.registerOption('Key File', OptionType.FILE_TYPE, None, None, 'Path to t
 settings.registerOption('TLS Certificate File', OptionType.FILE_TYPE, None, None, 'Path to the TLS Certificate for the Lumina server, if any')
 
 #try logging in with configured params
-client = LuminaClient(plugin)
+plugin.setClient(LuminaClient(plugin))

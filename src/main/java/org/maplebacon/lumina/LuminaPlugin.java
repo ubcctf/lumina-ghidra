@@ -22,7 +22,7 @@ import ghidra.util.Msg;
 
 @PluginInfo(
 	status = PluginStatus.UNSTABLE,
-	packageName = "lumina",
+	packageName = "org.maplebacon.lumina",
 	category = PluginCategoryNames.ANALYSIS,
 	shortDescription = "Lumina implementation for Ghidra",
 	description = "This plugin adds support for IDA's Lumina feature in Ghidra.",
@@ -32,6 +32,14 @@ import ghidra.util.Msg;
 public class LuminaPlugin extends ProgramPlugin {
 	private PythonExecutor python;
 	private File pyScripts;
+	
+	//temporary storage for the LuminaClient pyObject - apparently client could go out of scope for some reason for some installations after entry.py
+	private Object client;
+	
+	//expose for entry.py to be able to persist the client object here
+	public void setClient(Object client) {
+		this.client = client;
+	}
 
 	public LuminaPlugin(PluginTool tool) throws IOException {
 		super(tool, false, false);
@@ -52,7 +60,11 @@ public class LuminaPlugin extends ProgramPlugin {
 			ConsoleService console = tool.getService(ConsoleService.class);
 			python.setStreams(console.getStdOut(), console.getStdErr());
 			
-			python.set("plugin", this);   //pass everything we need to do the plugin in python; getTool will give us the rest we need			
+			python.set("plugin", this);   //pass everything we need to do the plugin in python; getTool will give us the rest we need
+			
+			//hotfix for relative imports
+			python.eval("import sys; sys.path.append(r'" +  pyScripts.getParentFile().getParent() +  "'); __package__ = 'data'");
+			
 			python.runScript(entry);		
 		} catch(NoSuchElementException e) {
 			Msg.error(this, "Lumina python scripts not found:", e);
@@ -68,6 +80,8 @@ public class LuminaPlugin extends ProgramPlugin {
 			public void actionPerformed(ActionContext context) {
 				if(python.isEnabled()) {					
 					python.set("ctx", currentProgram);
+					//pass client back into scope before evaluating
+					python.set("client", LuminaPlugin.this.client);
 					
 					if(funcSpecific)   //only set if its function specific - can be null otherwise
 						python.set("func", currentProgram.getFunctionManager().getFunctionContaining(currentLocation.getAddress()));

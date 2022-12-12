@@ -69,6 +69,9 @@ task pipInstall(type: Exec) {
 
 tasks.buildExtension.dependsOn(pipInstall)
 
+//don't include Ghidrathon folder when zipping - it's bulky and might break ClassSearcher
+tasks.buildExtension.exclude('Ghidrathon/**')   
+
 dependencies {
     implementation project(':Ghidrathon')
 }
