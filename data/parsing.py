@@ -107,7 +107,7 @@ def craft_push_md(ctx: ProgramDB, funcs: list[FunctionDB], tool: PluginTool = No
             tool.setStatusInfo(progress.format(count=i))
 
     return {
-        "field_0x10": 0, 
+        "type": PushMdOpt.PUSH_OVERRIDE_IF_BETTER,  #protocol 2 default
         "idb_filepath": ctx.getDomainFile().getProjectLocator().getProjectDir().getPath(), 
         "input_filepath": ctx.getExecutablePath(), 
         "input_md5": bytes.fromhex(ctx.getExecutableMD5()),   #Ghidra actually has a function for this so we dont need to reread the file ourselves
@@ -138,9 +138,8 @@ def craft_pull_md(ctx: ProgramDB, fs: list[FunctionDB], tool: PluginTool = None)
 
         i+=1
 
-    #already grouped, the first one will have the same arch as the rest
-    return {'flags': 1 if ctx.getDefaultPointerSize() == 8 else 0, 
-        'ukn_list':[0]*len(fs),
+    return {'flags': 1,  #protocol 2 default
+        'types':[],
         'funcInfos':sigs}
 
 

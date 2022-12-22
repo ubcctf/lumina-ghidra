@@ -120,9 +120,9 @@ class LuminaClient:
         if msg:
             it = iter(msg.results) #also results only have valid mds so its easier to model with iterator
             for i, found in enumerate(msg.found):
-                if not found: #0 means found for some reason? 
+                if found == ResultType.RES_OK:
                     apply_md(ctx, copy[i], next(it))
-            log = 'Pulled ' + str(len(msg.found) - sum(msg.found)) + '/' + str(len(msg.found)) + ' functions successfully.'
+            log = 'Pulled ' + str(sum([d == ResultType.RES_OK for d in msg.found])) + '/' + str(len(msg.found)) + ' functions successfully.'
             Msg.info(self.plugin, log)
             tool.setStatusInfo('[Lumina] ' + log)
         else:
@@ -142,7 +142,7 @@ class LuminaClient:
         msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)[1]
 
         if msg:
-            log = 'Pushed ' + str(sum(msg.resultsFlags)) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.'
+            log = 'Pushed ' + str(sum([d == ResultType.RES_ADDED for d in msg.resultsFlags])) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.'
             Msg.info(self.plugin, log)
             tool.setStatusInfo('[Lumina] ' + log)
         else:
