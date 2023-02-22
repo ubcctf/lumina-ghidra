@@ -121,7 +121,7 @@ class LuminaClient:
             it = iter(msg.results) #also results only have valid mds so its easier to model with iterator
             for i, found in enumerate(msg.found):
                 if found == ResultType.RES_OK:
-                    apply_md(ctx, copy[i], next(it))
+                    apply_md(ctx, copy[i], tool, next(it))
             log = 'Pulled ' + str(sum([d == ResultType.RES_OK for d in msg.found])) + '/' + str(len(msg.found)) + ' functions successfully.'
             Msg.info(self.plugin, log)
             tool.setStatusInfo('[Lumina] ' + log)
@@ -163,7 +163,7 @@ class LuminaClient:
         tool = self.plugin.getTool()
 
         if msg and msg.results:
-            apply_md(ctx, func, msg.results[0])
+            apply_md(ctx, func, tool, msg.results[0])
             log = 'Pulled metadata for function "' + func.getName() + '" successfully.'
             Msg.info(self.plugin, log)
             tool.setStatusInfo('[Lumina] ' + log)

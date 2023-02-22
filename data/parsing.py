@@ -3,8 +3,11 @@ from ghidra.program.database.function import FunctionDB
 from ghidra.program.database import ProgramDB
 from ghidra.program.model.symbol import SourceType
 from ghidra.program.flatapi import FlatProgramAPI
-from ghidra.program.model.listing import CodeUnit
+from ghidra.program.model.listing import CodeUnit, Function, ParameterImpl, LocalVariableImpl, VariableUtilities, VariableStorage
 from ghidra.framework.plugintool import PluginTool
+from ghidra.program.model.symbol import SourceType
+from ghidra.program.model.data import Undefined
+from java.util import Arrays
 
 import socket, itertools
 
@@ -13,6 +16,7 @@ from lumina_structs import *
 from lumina_structs.metadata import *
 
 from .sig.util import Sig, ARCH_MAPPING
+from .type import construct_type, cc_mapping
 
 #
 # Push Functions
@@ -82,8 +86,6 @@ def extract_md(ctx: ProgramDB, func: FunctionDB, gen: Sig) -> dict:
                 "func_name": func.getName(),  #func name is automatically whatever it should be
                 "func_size": len(block),
                 "serialized_data": {
-                    #TODO use construct instead of this workaround to get the byte length
-                    "size": len(b''.join([MetadataType.build(c['type']) + Metadata.build(c['data'], code=c['type']) for c in chunks])),  
                     "chunks": chunks}},
             "signature": {
                 "version": 1, 
@@ -143,9 +145,13 @@ def craft_pull_md(ctx: ProgramDB, fs: list[FunctionDB], tool: PluginTool = None)
         'funcInfos':sigs}
 
 
-
-def apply_md(ctx: ProgramDB, func: FunctionDB, info: Container):
+#we need tool for passing DataTypeManagerService to construct_cmplx unfortunately 
+def apply_md(ctx: ProgramDB, func: FunctionDB, tool: PluginTool, info: Container):
     #we don't really care about popularity atm, but it might be useful server side for sorting
+
+    #IDA (at least on 7.5) hardcoded no-override flag into apply_metadata, so tinfo and frame desc effectively never gets applied even if existing data is entirely auto-generated
+    #we won't follow that - manually clearing the data on every lumina pull is very annoying and there is undo anyway
+    #instead we will default to resetting metadata to what lumina provides on conflict
     prog = FlatProgramAPI(ctx)
 
     prog.start() #start a transaction
@@ -170,6 +176,39 @@ def apply_md(ctx: ProgramDB, func: FunctionDB, info: Container):
                     prog.setPreComment(addr, c.anterior)
                 if c.posterior:
                     prog.setPostComment(addr, c.posterior)
+        elif md.type == MetadataType.MD_TYPE_INFO:
+            #cannot reuse FunctionDefinitionDataType unfortunately since we have to directly set in the current func
+            #md.data.tinfo should always be BT_FUNC
+            params = []
+            for param in md.data.tinfo.data.params:
+                name = md.data.names.pop(0) if md.data.names else ""
+                params.append(ParameterImpl(name, construct_type(tool, param.type, md.data.names), ctx))
+            params = Arrays.asList(params)
+                
+            func.replaceParameters(params, Function.FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS, True, SourceType.IMPORTED)
+            func.setReturnType(construct_type(tool, md.data.tinfo.data.rettype, md.data.names), SourceType.IMPORTED)
+            if md.data.tinfo.data.cc.convention in cc_mapping:
+                cc = cc_mapping[md.data.tinfo.data.cc.convention].getDeclarationName()
+                func.setCallingConvention(cc if cc != '__cdecl' else '__stdcall')  #somehow cdecl doesnt exist (at least on ghidra 10.1.4) and is mapped to __stdcall according to the DWARF parser
+
+            #ghidra doesnt have near/far calls(?)
+            #TODO custom calling conventions since ghidra actually supports reordering with argloc (VariableStorage)
+            #i dont think spoiled registers can be defined though
+        elif md.type == MetadataType.MD_FRAME_DESC:
+            #ghidra doesnt have the variable definition section for comments storage, so discard for now; also oprepr as a concept doesnt exist in ghidra either
+            for var in md.data.vars:
+                #sometimes type == None if its default so just treat it as undefined type of nbytes
+                print(var.name, var.type.tinfo if var.type else None)
+                t = construct_type(tool, var.type.tinfo, var.type.names, var.nbytes) if var.type else Undefined.getUndefinedDataType(var.nbytes)
+                name = var.name if var.name else f'lumina_{hex(var.off)}'
+
+                #TODO check if this still matches in architectures with stack growing up (also are we sure frregs is for this purpose)
+                #ghidra also uses rbp instead of rsp (offset goes down instead of up)
+                v = LocalVariableImpl(name, t, -(md.data.frsize - var.off + md.data.frregs), ctx)
+
+                #TODO argloc
+                VariableUtilities.checkVariableConflict(func, v, v.getVariableStorage(), True)
+                func.addLocalVariable(v, SourceType.IMPORTED)
         else:
             Msg.debug("Lumina", 'Unimplemented metadata type ' + str(md.type) + ', skipping for now...')
 
