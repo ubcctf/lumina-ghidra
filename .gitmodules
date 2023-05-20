@@ -1,3 +1,6 @@
 [submodule "Ghidrathon"]
 	path = Ghidrathon
 	url = https://github.com/mandiant/Ghidrathon.git
+[submodule "data/lumina_structs"]
+	path = data/lumina_structs
+	url = https://github.com/ubcctf/lumina_structs
