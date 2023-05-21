@@ -53,15 +53,14 @@ public class LuminaPlugin extends ProgramPlugin {
 	protected void init() {
 		//start the lumina client; DONE move to a separate thread in case other plugins want to make a jep interpreter on the GUI thread too? (also for running background tasks)
 		try {
-			python = new PythonExecutor();
-			ResourceFile entry = Arrays.asList(pyScripts.listFiles()).stream().filter(f -> f.getName().equals("entry.py")).map(f -> new ResourceFile(f)).findFirst().get();
-			
 			//set any errors to print to the console; it is expected that all communciations should be done through Msg logger but for debugging purposes this would be much more visible
 			ConsoleService console = tool.getService(ConsoleService.class);
-			python.setStreams(console.getStdOut(), console.getStdErr());
-			
+			python = new PythonExecutor(console.getStdOut(), console.getStdErr());
+
+			ResourceFile entry = Arrays.asList(pyScripts.listFiles()).stream().filter(f -> f.getName().equals("entry.py")).map(f -> new ResourceFile(f)).findFirst().get();
+
 			python.set("plugin", this);   //pass everything we need to do the plugin in python; getTool will give us the rest we need
-			
+
 			//hotfix for relative imports
 			python.eval("import sys; sys.path.append(r'" +  pyScripts.getParentFile().getParent() +  "'); __package__ = 'data'");
 			
