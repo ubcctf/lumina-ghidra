@@ -9,6 +9,8 @@ import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 
 import generic.jar.ResourceFile;
 import ghidrathon.interpreter.GhidrathonInterpreter;
+import ghidrathon.GhidrathonConfig;
+import ghidrathon.GhidrathonUtils;
 
 /**
  * The class responsible for executing python code,
@@ -27,7 +29,7 @@ public class PythonExecutor {
 	/**
 	 * Instantiates the environment for the python interpreter.
 	 */
-	public PythonExecutor() {
+	public PythonExecutor(PrintWriter out, PrintWriter err) {
 		BasicThreadFactory factory = new BasicThreadFactory.Builder()
 				.namingPattern("Lumina-JEP-thread-%d")
 				.priority(7)   //higher than norm, lower than critical
@@ -35,8 +37,12 @@ public class PythonExecutor {
 		
 		pyThread = Executors.newSingleThreadExecutor(factory);
 		
+		final GhidrathonConfig config = GhidrathonUtils.getDefaultGhidrathonConfig();
+		config.addStdOut(out);
+		config.addStdErr(err);
+
 		try {  //wait until it finishes
-			pyThread.submit(() -> python = GhidrathonInterpreter.get()).get();
+			pyThread.submit(() -> python = GhidrathonInterpreter.get(config)).get();
 		} catch (InterruptedException | ExecutionException e) {
 			python = null;   //disable on error
 		}
@@ -95,15 +101,6 @@ public class PythonExecutor {
 	public void set(String name, Object obj) {  //we dont really need a sync method for this since we dont really care about when it finishes and the ordering is already guaranteed
 		pyThread.execute(() -> python.set(name, obj));
 	}
-		
-	/**
-	 * Redirects the python interpreter output to the streams provided
-	 * @param out stream to redirect stdout to
-	 * @param err stream to redirect stderr to
-	 */
-	public void setStreams(PrintWriter out, PrintWriter err) {  //we dont really need a sync method for this since we dont really care about when it finishes and the ordering is already guaranteed
-		pyThread.execute(() -> python.setStreams(out, err));
-	}	
 	
 	
 	/**
