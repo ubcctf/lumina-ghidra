@@ -136,7 +136,9 @@ class LuminaClient:
         tool = self.plugin.getTool()
 
         kwargs = craft_push_md(ctx, list(ctx.getFunctionManager().getFunctions(True)), tool)
-        
+
+        Msg.debug(self.plugin, str(len(kwargs["funcInfos"])) + " functions have useful metadata")
+
         tool.setStatusInfo('[Lumina] Sending push request...')
 
         msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)[1]
@@ -174,9 +176,16 @@ class LuminaClient:
     def push_function_md(self, ctx: ProgramDB, func: FunctionDB):
         Msg.debug(self.plugin, 'Pushing metadata for func ' + func.getName() + '...')
 
-        msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **craft_push_md(ctx, [func]))[1]
-
         tool = self.plugin.getTool()
+
+        push_md = craft_push_md(ctx, [func])
+
+        if not push_md["funcInfos"]:
+            Msg.debug(self.plugin, "Function " + func.getName() + " has no useful metadata")
+            tool.setStatusInfo("[Lumina] Function " + func.getName() + " not pushed: no useful metadata")
+            return
+
+        msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **push_md)[1]
 
         if msg:
             log = 'Pushed metadata for function "' + func.getName() + '" successfully.'
