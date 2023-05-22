@@ -113,21 +113,22 @@ class LuminaClient:
         #(if possible; we aren't using their task queue so im not sure)
         tool.setStatusInfo('[Lumina] Sending pull request...')
 
-        msg = self.send_and_recv_rpc(RPC_TYPE.PULL_MD, **pull)[1]
+        pkt, msg = self.send_and_recv_rpc(RPC_TYPE.PULL_MD, **pull)
 
         tool.setStatusInfo('[Lumina] Applying metadata...')
 
-        if msg:
+        if pkt.code == RPC_TYPE.PULL_MD_RESULT:
             it = iter(msg.results) #also results only have valid mds so its easier to model with iterator
             for i, found in enumerate(msg.found):
                 if found == ResultType.RES_OK:
                     apply_md(ctx, copy[i], tool, next(it))
-            log = 'Pulled ' + str(sum([d == ResultType.RES_OK for d in msg.found])) + '/' + str(len(msg.found)) + ' functions successfully.'
-            Msg.info(self.plugin, log)
-            tool.setStatusInfo('[Lumina] ' + log)
+            log = 'Pulled ' + str(sum([d == ResultType.RES_OK for d in msg.found])) + '/' + str(len(msg.found)) + ' function(s) successfully.'
+        elif pkt.code == RPC_TYPE.RPC_FAIL:
+            log = "Pull request for all functions failed: " + msg.message
         else:
-            #it doesnt matter if the status is always there its better than not being able to see it at all
-            tool.setStatusInfo('[Lumina] Pull request for all functions failed.')
+            log = "Pull request for all functions failed: unexpected RPC reply " + pkt.code
+        Msg.info(self.plugin, log)
+        tool.setStatusInfo('[Lumina] ' + log)
 
 
     def push_all_mds(self, ctx: ProgramDB):
@@ -137,18 +138,20 @@ class LuminaClient:
 
         kwargs = craft_push_md(ctx, list(ctx.getFunctionManager().getFunctions(True)), tool)
 
-        Msg.debug(self.plugin, str(len(kwargs["funcInfos"])) + " functions have useful metadata")
+        Msg.debug(self.plugin, str(len(kwargs["funcInfos"])) + " function(s) have useful metadata")
 
         tool.setStatusInfo('[Lumina] Sending push request...')
 
-        msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)[1]
+        pkt, msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **kwargs)
 
-        if msg:
-            log = 'Pushed ' + str(sum([d == ResultType.RES_ADDED for d in msg.resultsFlags])) + '/' + str(len(msg.resultsFlags)) + ' functions successfully.'
-            Msg.info(self.plugin, log)
-            tool.setStatusInfo('[Lumina] ' + log)
+        if pkt.code == RPC_TYPE.PUSH_MD_RESULT:
+            log = 'Pushed ' + str(sum([d == ResultType.RES_ADDED for d in msg.resultsFlags])) + '/' + str(len(msg.resultsFlags)) + ' function(s) successfully.'
+        elif pkt.code == RPC_TYPE.RPC_FAIL:
+            log = "Push request for all functions failed: " + msg.message
         else:
-            tool.setStatusInfo('[Lumina] Push request for all functions failed.')
+            log = "Push request for all functions failed: unexpected RPC reply " + pkt.code
+        Msg.info(self.plugin, log)
+        tool.setStatusInfo('[Lumina] ' + log)
 
 
     #
@@ -158,20 +161,25 @@ class LuminaClient:
     def pull_function_md(self, ctx: ProgramDB, func: FunctionDB):
         Msg.debug(self.plugin, 'Pulling metadata for func ' + func.getName() + '...')
 
-        msg = self.send_and_recv_rpc(RPC_TYPE.PULL_MD, **craft_pull_md(ctx, [func]))[1]
+        pkt, msg = self.send_and_recv_rpc(RPC_TYPE.PULL_MD, **craft_pull_md(ctx, [func]))
 
         #status info kinda nice for displaying subtle msgs to the user that's not lost in the logs
         #so lets do it even for the function specific commands
         tool = self.plugin.getTool()
 
-        if msg and msg.results:
-            apply_md(ctx, func, tool, msg.results[0])
-            log = 'Pulled metadata for function "' + func.getName() + '" successfully.'
-            Msg.info(self.plugin, log)
-            tool.setStatusInfo('[Lumina] ' + log)
+        if pkt.code == RPC_TYPE.PULL_MD_RESULT:
+            if msg.results:
+                apply_md(ctx, func, tool, msg.results[0])
+                log = 'Pulled metadata for function "' + func.getName() + '" successfully.'
+            else:
+                log = "Pull request for " + func.getName() + " failed: no metadata returned"
+        elif pkt.code == RPC_TYPE.RPC_FAIL:
+            log = "Pull request for " + func.getName() + " failed: " + msg.message
         else:
-            tool.setStatusInfo('[Lumina] Pull request for the function failed.')
-                
+            log = "Pull request for " + func.getName() + " failed: unexpected RPC reply " + pkt.code
+        Msg.info(self.plugin, log)
+        tool.setStatusInfo('[Lumina] ' + log)
+
 
     def push_function_md(self, ctx: ProgramDB, func: FunctionDB):
         Msg.debug(self.plugin, 'Pushing metadata for func ' + func.getName() + '...')
@@ -185,11 +193,13 @@ class LuminaClient:
             tool.setStatusInfo("[Lumina] Function " + func.getName() + " not pushed: no useful metadata")
             return
 
-        msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **push_md)[1]
+        pkt, msg = self.send_and_recv_rpc(RPC_TYPE.PUSH_MD, **push_md)
 
-        if msg:
+        if pkt.code == RPC_TYPE.PUSH_MD_RESULT:
             log = 'Pushed metadata for function "' + func.getName() + '" successfully.'
-            Msg.info(self.plugin, log)
-            tool.setStatusInfo('[Lumina] ' + log)
+        elif pkt.code == RPC_TYPE.RPC_FAIL:
+            log = "Push request for " + func.getName() + " failed: " + msg.message
         else:
-            tool.setStatusInfo('[Lumina] Push request for the function failed.')
+            log = "Push request for " + func.getName() + " failed: unexpected RPC reply " + pkt.code
+        Msg.info(self.plugin, log)
+        tool.setStatusInfo('[Lumina] ' + log)
