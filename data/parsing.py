@@ -5,7 +5,6 @@ from ghidra.program.model.symbol import SourceType
 from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.program.model.listing import CodeUnit, Function, ParameterImpl, LocalVariableImpl, VariableUtilities, VariableStorage
 from ghidra.framework.plugintool import PluginTool
-from ghidra.program.model.symbol import SourceType
 from ghidra.program.model.data import Undefined
 from java.util import Arrays
 
@@ -75,7 +74,8 @@ def extract_md(ctx: ProgramDB, func: FunctionDB, gen: Sig) -> dict:
     #OPREPRS as a concept doesnt really exist in Ghidra either(??)
     #but might be helpful in defining data vars so parsing might be good
 
-    if chunks: #only compute signature and returns something if has data
+    is_non_auto_name = func.getSymbol() and func.getSymbol().getSource() == SourceType.USER_DEFINED
+    if chunks or is_non_auto_name: #only compute signature and returns something if has data
         data = gen.calc_func_metadata(func)
         if not data:
             return None
