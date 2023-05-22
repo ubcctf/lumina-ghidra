@@ -103,7 +103,27 @@ public class LuminaPlugin extends ProgramPlugin {
 		return action;
 	}
 	
-	
+	private DockingAction getReloadAction(String name) {
+		MenuData tb = new MenuData(new String[] {"Lumina", name});
+		DockingAction action = new DockingAction(name, "Lumina") {
+			@Override
+			public void actionPerformed(ActionContext context) {
+				if (python.isEnabled())
+					python.close();
+				init();
+			}
+
+			@Override
+			public boolean isEnabledForContext(ActionContext context) {
+				return true;
+			}
+		};
+		action.setMenuBarData(tb);
+		action.setEnabled(true);
+		action.markHelpUnnecessary();
+		return action;
+	}
+
 	private void createActions() {
 		if(tool.getDockingActionsByOwnerName("Lumina").size() == 0) {   //only add if not added already
 			tool.addAction(getLuminaAction("Pull current function metadata", "client.pull_function_md(ctx, func)", true, true));
@@ -111,6 +131,7 @@ public class LuminaPlugin extends ProgramPlugin {
 			tool.addAction(getLuminaAction("Pull all function metadata", "client.pull_all_mds(ctx)", true, false));
 			tool.addAction(getLuminaAction("Push all function metadata", "client.push_all_mds(ctx)", true, false));
 			tool.addAction(getLuminaAction("Reconnect", "client.reconnect()", false, false));
+			tool.addAction(getReloadAction("Reload plugin (DEV ONLY)"));
 			//TODO option for reverting applied metadata
 		}
 	}
